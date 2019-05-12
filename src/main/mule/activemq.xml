@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="c7098066-d2ae-481d-ad75-5cfa145f9de1" >
+		<jms:active-mq-connection username="admin" password="admin" >
+			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+		</jms:active-mq-connection>
+	</jms:config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="ab2b2622-edae-4946-bb36-171fa7e5f6bc" >
+		<file:connection workingDir="H:\mule-batch\input" />
+	</file:config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="106d4856-f4a6-4df4-a226-7e8b773e5bc8" >
+		<db:oracle-connection host="localhost" user="kuldeep" password="test" instance="XE" />
+	</db:config>
+	<flow name="activemqFlow" doc:id="a9e4aaf5-8249-46e1-8fe3-1d1ca4301f1a" >
+		<file:listener doc:name="On New or Updated File" doc:id="3e2d8c18-f112-4929-9fed-166cf0949172" config-ref="File_Config" moveToDirectory="H:\mule-batch\archive">
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+			<file:matcher filenamePattern="*.csv" />
+		</file:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="d460c74f-c0b5-43e9-af5b-50876bdd7216" message="#[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="cb67ff25-1311-4ad6-a3eb-26f9b06d81fa">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="e9e2c2f0-fb97-451a-ba49-a13f523bb88e" message="#[payload]" />
+		<jms:publish doc:name="Publish" doc:id="f2584a64-f8c9-468c-8ced-b95a4d603571" config-ref="JMS_Config" destination="FileQueue"/>
+		<jms:consume doc:name="Consume" doc:id="12cafad7-1099-438e-940e-a35335f04eaf" config-ref="JMS_Config" destination="FileQueue"/>
+		<ee:transform doc:name="Transform Message" doc:id="727343a3-8e3e-4151-84f5-e06428528432" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<foreach doc:name="For Each" doc:id="a16b46cd-b6e4-4430-9a41-425663091d87" >
+			<logger level="INFO" doc:name="Logger" doc:id="9d4d3864-cd8f-4384-9d0f-80a0f0b2244b" />
+			<db:insert doc:name="Insert" doc:id="dfea5a8c-4db3-44f2-acbd-d68f87498344" config-ref="Database_Config">
+				<db:sql >INSERT INTO activemq(id,name,age)
+VALUES(:id,:name,:age)</db:sql>
+				<db:input-parameters ><![CDATA[#[payload]]]></db:input-parameters>
+			</db:insert>
+		</foreach>
+	</flow>
+</mule>
